@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>オフライン警告システム（人/猫/犬 検出）</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <div class="wrap">
+      <h1>オフライン警告システム（人/猫/犬 検出）</h1>
+
+      <div class="controls">
+        <button id="toggle">開始</button>
+
+        <label>音声:
+          <select id="voiceMode">
+            <option value="tts">TTS（日本語）</option>
+            <option value="beep">ビープ音</option>
+          </select>
+        </label>
+
+        <label>しきい値: <span id="thVal">50%</span>
+          <input id="threshold" type="range" min="0.3" max="0.9" step="0.01" value="0.5" />
+        </label>
+
+        <label>クールダウン(秒):
+          <input id="cooldown" type="number" min="1" max="60" value="8" />
+        </label>
+
+        <button id="testSpeak">テスト再生</button>
+      </div>
+
+      <div class="filters">
+        <div class="targets">
+          対象:
+          <label><input type="checkbox" value="person" checked /> person</label>
+          <label><input type="checkbox" value="cat" checked /> cat</label>
+          <label><input type="checkbox" value="dog" checked /> dog</label>
+        </div>
+
+        <label>検知エリア（中央を残す%）: <span id="zoneVal">20</span>%
+          <input id="zone" type="range" min="0" max="45" step="1" value="20" />
+        </label>
+
+        <label>最小面積: <span id="minVal">1</span>%
+          <input id="minArea" type="range" min="0" max="10" step="0.5" value="1" />
+        </label>
+      </div>
+
+      <label class="wmsg">警告メッセージ（TTS時）
+        <input id="warningText" type="text" value="警告：ここは立入禁止です。直ちに立ち去ってください。" />
+      </label>
+
+      <p id="status" class="status">初期化待ち...</p>
+      <p id="clock" class="status"></p>
+
+      <div class="stage">
+        <video id="video" playsinline muted></video>
+        <canvas id="canvas"></canvas>
+      </div>
+    </div>
+
+    <!-- ローカルに配置した UMD を読み込み（オフライン） -->
+    <script src="./assets/tf.min.js"></script>
+    <script src="./assets/coco-ssd.min.js"></script>
+    <script src="./app.js"></script>
+  </body>
+  </html>
