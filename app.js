@@ -21,6 +21,11 @@
   let lastWarnAt = 0;
   let model = null;
   const targetSet = new Set(['person', 'cat', 'dog']);
+  const labelMap = {
+    person: '人物',
+    cat: '猫',
+    dog: '犬',
+  };
 
   const beep = () => {
     try {
@@ -129,7 +134,18 @@
 
       draw(detections);
       if (filtered.length > 0) {
-        speak(warningTextInput.value || '警告：ここは立入禁止です。直ちに立ち去ってください。');
+        const msg = (() => {
+          const base = (warningTextInput.value || '警告：ここは立入禁止です。直ちに立ち去ってください。').trim();
+          const counts = new Map();
+          filtered.forEach((d) => {
+            const label = labelMap[d.class] || d.class;
+            counts.set(label, (counts.get(label) || 0) + 1);
+          });
+          if (counts.size === 0) return base;
+          const parts = Array.from(counts.entries()).map(([label, count]) => (count > 1 ? `${label} ${count}件` : label));
+          return `${base} 検知対象: ${parts.join('、')}。`;
+        })();
+        speak(msg);
         statusEl.textContent = `検知: ${filtered.length}件 / しきい値 ${Math.round(Number(th.value) * 100)}%`;
       } else {
         statusEl.textContent = `検知なし / しきい値 ${Math.round(Number(th.value) * 100)}%`;
