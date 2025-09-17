@@ -22,86 +22,7 @@
   let model = null;
   const targetSet = new Set(['person', 'cat', 'dog']);
   const labelMap = {
-    person: '人物',
-    bicycle: '自転車',
-    car: '車',
-    motorcycle: 'オートバイ',
-    airplane: '飛行機',
-    bus: 'バス',
-    train: '電車',
-    truck: 'トラック',
-    boat: 'ボート',
-    'traffic light': '信号機',
-    'fire hydrant': '消火栓',
-    'stop sign': '一時停止標識',
-    'parking meter': 'パーキングメーター',
-    bench: 'ベンチ',
-    bird: '鳥',
-    cat: '猫',
-    dog: '犬',
-    horse: '馬',
-    sheep: '羊',
-    cow: '牛',
-    elephant: '象',
-    bear: '熊',
-    zebra: 'シマウマ',
-    giraffe: 'キリン',
-    backpack: 'バックパック',
-    umbrella: '傘',
-    handbag: 'ハンドバッグ',
-    tie: 'ネクタイ',
-    suitcase: 'スーツケース',
-    frisbee: 'フリスビー',
-    skis: 'スキー板',
-    snowboard: 'スノーボード',
-    'sports ball': 'ボール',
-    kite: '凧',
-    'baseball bat': '野球バット',
-    'baseball glove': '野球グローブ',
-    skateboard: 'スケートボード',
-    surfboard: 'サーフボード',
-    'tennis racket': 'テニスラケット',
-    bottle: 'ボトル',
-    'wine glass': 'ワイングラス',
-    cup: 'コップ',
-    fork: 'フォーク',
-    knife: 'ナイフ',
-    spoon: 'スプーン',
-    bowl: 'ボウル',
-    banana: 'バナナ',
-    apple: 'リンゴ',
-    sandwich: 'サンドイッチ',
-    orange: 'オレンジ',
-    broccoli: 'ブロッコリー',
-    carrot: 'ニンジン',
-    'hot dog': 'ホットドッグ',
-    pizza: 'ピザ',
-    donut: 'ドーナツ',
-    cake: 'ケーキ',
-    chair: '椅子',
-    couch: 'ソファ',
-    'potted plant': '観葉植物',
-    bed: 'ベッド',
-    'dining table': '食卓',
-    toilet: 'トイレ',
-    tv: 'テレビ',
-    laptop: 'ノートパソコン',
-    mouse: 'マウス',
-    remote: 'リモコン',
-    keyboard: 'キーボード',
-    'cell phone': '携帯電話',
-    microwave: '電子レンジ',
-    oven: 'オーブン',
-    toaster: 'トースター',
-    sink: '流し台',
-    refrigerator: '冷蔵庫',
-    book: '本',
-    clock: '時計',
-    vase: '花瓶',
-    scissors: 'はさみ',
-    'teddy bear': 'テディベア',
-    'hair drier': 'ドライヤー',
-    toothbrush: '歯ブラシ',
+
   };
 
   const beep = () => {
@@ -220,10 +141,7 @@
           });
           if (counts.size === 0) return base;
           const parts = Array.from(counts.entries()).map(([label, count]) => (count > 1 ? `${label} ${count}件` : label));
-          const detail = parts.join('、');
-          const cleanedBase = base.replace(/[。．.!?！？\s]+$/u, '');
-          const basePart = cleanedBase ? `${cleanedBase}。` : '';
-          return `${basePart}${detail}を検知しました。`;
+
         })();
         speak(msg);
         statusEl.textContent = `検知: ${filtered.length}件 / しきい値 ${Math.round(Number(th.value) * 100)}%`;
