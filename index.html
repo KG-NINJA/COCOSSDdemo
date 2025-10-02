@@ -1,80 +1,135 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="ja">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>オフライン警告システム（人/猫/犬 検出）</title>
-    <link rel="stylesheet" href="./style.css" />
-  </head>
-  <body>
-    <div class="wrap">
-      <h1>オフライン警告システム（人/猫/犬 検出）</h1>
-      <!-- ツイートボタン -->
-<div class="tweet-button" style="margin-top:10px;">
-  <a href="https://twitter.com/intent/tweet?text=COCOSSDdemo%20%23KGNINJA%20https%3A%2F%2Fkg-ninja.github.io%2FCOCOSSDdemo%2F" 
-     class="twitter-share-button" 
-     data-size="large" 
-     target="_blank" 
-     rel="noopener noreferrer">
-    ツイートする
-  </a>
-</div>
+<head>
+  <meta charset="UTF-8">
+  <title>ウェルカム検知システム</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
+  <style>
+    video, canvas { max-width: 100%; display: block; }
+    #status { margin-top: 8px; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <button id="toggle">開始</button>
+  <div id="status">待機中</div>
+  <video id="video" autoplay playsinline muted></video>
+  <canvas id="canvas"></canvas>
 
+<script>
+(() => {
+  const video = document.getElementById('video');
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d');
+  const btn = document.getElementById('toggle');
+  const statusEl = document.getElementById('status');
 
-      <div class="controls">
-        <button id="toggle">開始</button>
+  let running = false;
+  let model = null;
+  let lastSpeakAt = 0;
+  const cooldownMs = 8000; // 同じ対象で連続発声を防ぐ（ミリ秒）
 
-        <label>音声:
-          <select id="voiceMode">
-            <option value="tts">TTS（日本語）</option>
-            <option value="beep">ビープ音</option>
-          </select>
-        </label>
+  const targetSet = new Set(['person', 'dog', 'cat']);
+  const labelMap = { person: '人物', dog: '犬', cat: '猫' };
 
-        <label>しきい値: <span id="thVal">50%</span>
-          <input id="threshold" type="range" min="0.3" max="0.9" step="0.01" value="0.5" />
-        </label>
+  const speak = (text) => {
+    const now = Date.now();
+    if (now - lastSpeakAt < cooldownMs) return;
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = 'ja-JP';
+    u.rate = 1.0;
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(u);
+    lastSpeakAt = now;
+  };
 
-        <label>クールダウン(秒):
-          <input id="cooldown" type="number" min="1" max="60" value="8" />
-        </label>
+  const startCamera = async () => {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
+    video.srcObject = stream;
+    await new Promise(r => (video.onloadedmetadata = () => r()));
+    await video.play();
+    canvas.width = video.videoWidth || 640;
+    canvas.height = video.videoHeight || 480;
+  };
 
-        <button id="testSpeak">テスト再生</button>
-      </div>
+  const draw = (preds) => {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    preds.forEach(p => {
+      const [x, y, w, h] = p.bbox;
+      if (!targetSet.has(p.class)) return;
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = '#ff4136';
+      ctx.strokeRect(x, y, w, h);
+      const tag = `${labelMap[p.class] || p.class} ${(p.score * 100).toFixed(0)}%`;
+      ctx.font = '16px sans-serif';
+      const tw = ctx.measureText(tag).width + 8;
+      ctx.globalAlpha = 0.7; ctx.fillStyle = '#ff4136';
+      ctx.fillRect(x, Math.max(0, y - 20), tw, 20); ctx.globalAlpha = 1;
+      ctx.fillStyle = '#fff'; ctx.fillText(tag, x + 4, Math.max(14, y - 6));
+    });
+  };
 
-      <div class="filters">
-        <div class="targets">
-          対象:
-          <label><input type="checkbox" value="person" checked /> person</label>
-          <label><input type="checkbox" value="cat" checked /> cat</label>
-          <label><input type="checkbox" value="dog" checked /> dog</label>
-        </div>
+  const loop = async () => {
+    if (!running || !model) return;
+    try {
+      const detections = await model.detect(video);
+      draw(detections);
 
-        <label>検知エリア（中央を残す%）: <span id="zoneVal">20</span>%
-          <input id="zone" type="range" min="0" max="45" step="1" value="20" />
-        </label>
+      const filtered = detections.filter(d => targetSet.has(d.class) && d.score >= 0.7);
+      if (filtered.length > 0) {
+        const hasPerson = filtered.some(d => d.class === 'person');
+        const hasDog = filtered.some(d => d.class === 'dog');
+        const hasCat = filtered.some(d => d.class === 'cat');
 
-        <label>最小面積: <span id="minVal">1</span>%
-          <input id="minArea" type="range" min="0" max="10" step="0.5" value="1" />
-        </label>
-      </div>
+        let msg = null;
+        // 3種同時
+        if (hasPerson && hasDog && hasCat) msg = '人間とわんちゃんとにゃんこちゃん、いらっしゃい';
+        // 2種組み合わせ
+        else if (hasPerson && hasDog) msg = '人間とわんちゃん、いらっしゃい';
+        else if (hasPerson && hasCat) msg = '人間とにゃんこちゃん、いらっしゃい';
+        else if (hasDog && hasCat) msg = 'わんちゃんとにゃんこちゃん、いらっしゃい';
+        // 単体
+        else if (hasPerson) msg = 'ようこそ、いらっしゃいました';
+        else if (hasDog) msg = 'わんちゃん、いらっしゃい';
+        else if (hasCat) msg = 'にゃんこちゃん、いらっしゃい';
 
-      <label class="wmsg">警告メッセージ（TTS時）
-        <input id="warningText" type="text" value="警告：ここは立入禁止です。直ちに立ち去ってください。" />
-      </label>
+        if (msg) speak(msg);
+        statusEl.textContent = `検知: ${filtered.length}件`;
+      } else {
+        statusEl.textContent = '検知なし';
+      }
+    } catch (e) {
+      statusEl.textContent = `エラー: ${e.message}`;
+    }
+    requestAnimationFrame(loop);
+  };
 
-      <p id="status" class="status">初期化待ち...</p>
-      <p id="clock" class="status"></p>
-
-      <div class="stage">
-        <video id="video" playsinline muted></video>
-        <canvas id="canvas"></canvas>
-      </div>
-    </div>
-
-    <!-- ローカルに配置した UMD を読み込み（オフライン） -->
-    <script src="./assets/tf.min.js"></script>
-    <script src="./assets/coco-ssd.min.js"></script>
-    <script src="./app.js"></script>
-  </body>
-  </html>
+  btn.addEventListener('click', async () => {
+    if (!running) {
+      try {
+        statusEl.textContent = 'モデル読込中...';
+        model = await cocoSsd.load();
+        statusEl.textContent = 'カメラ起動中...';
+        await startCamera();
+        running = true;
+        btn.textContent = '停止';
+        statusEl.textContent = '稼働中';
+        requestAnimationFrame(loop);
+      } catch (e) {
+        statusEl.textContent = `初期化エラー: ${e.message}`;
+      }
+    } else {
+      running = false;
+      btn.textContent = '開始';
+      statusEl.textContent = '停止中';
+      if (video.srcObject) {
+        video.srcObject.getTracks().forEach(t => t.stop());
+        video.srcObject = null;
+      }
+    }
+  });
+})();
+</script>
+</body>
+</html>
