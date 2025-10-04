@@ -22,9 +22,7 @@
   let model = null;
   const targetSet = new Set(['person', 'cat', 'dog']);
   const labelMap = {
-    person: '人物',
-    cat: '猫',
-    dog: '犬',
+
   };
 
   const beep = () => {
@@ -143,7 +141,7 @@
           });
           if (counts.size === 0) return base;
           const parts = Array.from(counts.entries()).map(([label, count]) => (count > 1 ? `${label} ${count}件` : label));
-          return `${base} 検知対象: ${parts.join('、')}。`;
+
         })();
         speak(msg);
         statusEl.textContent = `検知: ${filtered.length}件 / しきい値 ${Math.round(Number(th.value) * 100)}%`;
