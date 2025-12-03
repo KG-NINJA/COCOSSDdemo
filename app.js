@@ -2,6 +2,11 @@
   const SAMPLE_W = 160;
   const SAMPLE_H = 120;
   const PANEL_INTERVAL = 300;
+  const HR_SAMPLE_MS = 50;
+  const HR_WINDOW_SEC = 12;
+  const HR_MIN_HZ = 0.8;
+  const HR_MAX_HZ = 3.0;
+  const HR_STEP_HZ = 0.02;
 
   const $ = (sel) => document.querySelector(sel);
   const video = $('#video');
@@ -26,15 +31,21 @@
   const contrastEl = $('#contrast');
   const colorEl = $('#color');
   const phaseEl = $('#phase');
+  const bpmEl = $('#bpm');
+  const bpmPhraseEl = $('#bpmPhrase');
 
   const sampleCanvas = $('#sample');
   const sampleCtx = sampleCanvas.getContext('2d');
 
   let running = false;
   let sampleTimer = null;
+  let hrTimer = null;
   let lastWarnAt = 0;
   let model = null;
   let lastBrightness = null;
+  let lastHeartSpeakAt = 0;
+  let heartSignal = [];
+  let heartTime = [];
 
   const targetSet = new Set(['person', 'cat', 'dog']);
   const labelMap = {
@@ -51,6 +62,8 @@
     contrastEl.textContent = 'std --.- / motion --.-';
     colorEl.textContent = 'R --.- / G --.- / B --.-';
     phaseEl.textContent = 'IDLE';
+    bpmEl.textContent = '-- bpm';
+    bpmPhraseEl.textContent = '心拍計測が開始されると、状態に合わせたボイスが流れます。';
   };
 
   const computeMetrics = () => {
@@ -181,6 +194,80 @@
     } catch (e) { }
   };
 
+  const collectHeartSample = () => {
+    if (!running || !video.videoWidth || !video.videoHeight) return;
+    sampleCtx.drawImage(video, 0, 0, SAMPLE_W, SAMPLE_H);
+    const cx = Math.floor(SAMPLE_W * 0.25);
+    const cy = Math.floor(SAMPLE_H * 0.25);
+    const w = Math.floor(SAMPLE_W * 0.5);
+    const h = Math.floor(SAMPLE_H * 0.5);
+    const { data } = sampleCtx.getImageData(cx, cy, w, h);
+    let gSum = 0;
+    for (let i = 0; i < data.length; i += 4) {
+      gSum += data[i + 1];
+    }
+    const meanG = gSum / (data.length / 4);
+    const now = performance.now();
+    heartSignal.push(meanG);
+    heartTime.push(now);
+
+    // keep window
+    const cutoff = now - HR_WINDOW_SEC * 1000;
+    while (heartTime.length > 0 && heartTime[0] < cutoff) {
+      heartTime.shift();
+      heartSignal.shift();
+    }
+  };
+
+  const estimateHeartRate = () => {
+    if (heartSignal.length < 30) return null;
+    const n = heartSignal.length;
+    const durationSec = (heartTime[n - 1] - heartTime[0]) / 1000;
+    if (durationSec < 4) return null;
+    const mean = heartSignal.reduce((a, b) => a + b, 0) / n;
+    const values = heartSignal.map((v) => v - mean);
+    const dt = durationSec / (n - 1);
+    let best = { f: 0, power: 0 };
+    for (let f = HR_MIN_HZ; f <= HR_MAX_HZ; f += HR_STEP_HZ) {
+      let re = 0, im = 0;
+      const omega = -2 * Math.PI * f * dt;
+      for (let i = 0; i < n; i++) {
+        const phi = omega * i;
+        re += values[i] * Math.cos(phi);
+        im += values[i] * Math.sin(phi);
+      }
+      const power = (re * re + im * im) / n;
+      if (power > best.power) {
+        best = { f, power };
+      }
+    }
+    if (best.f === 0) return null;
+    return { bpm: Math.round(best.f * 60), strength: best.power };
+  };
+
+  const heartPhrase = (bpm) => {
+    if (!bpm || Number.isNaN(bpm)) return '計測中...';
+    if (bpm < 60) return 'リラックス状態です。穏やかな呼吸を維持しましょう。';
+    if (bpm < 90) return '安定しています。このままキープ。';
+    if (bpm < 110) return '少し高めです。深呼吸で落ち着けます。';
+    return '高心拍を検知。少し休憩してください。';
+  };
+
+  const updateHeartRate = () => {
+    const est = estimateHeartRate();
+    if (!est) return;
+    const { bpm, strength } = est;
+    const phrase = heartPhrase(bpm);
+    bpmEl.textContent = `${bpm} bpm`;
+    bpmPhraseEl.textContent = phrase;
+
+    const now = Date.now();
+    if (strength > 0.1 && now - lastHeartSpeakAt > 8000) {
+      speak(`心拍数 ${bpm}、${phrase}`);
+      lastHeartSpeakAt = now;
+    }
+  };
+
   const startCamera = async () => {
     const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
     video.srcObject = stream;
@@ -294,11 +381,20 @@
   const startMetrics = () => {
     if (sampleTimer) clearInterval(sampleTimer);
     sampleTimer = setInterval(updateMetrics, PANEL_INTERVAL);
+    if (hrTimer) clearInterval(hrTimer);
+    hrTimer = setInterval(() => {
+      collectHeartSample();
+      updateHeartRate();
+    }, HR_SAMPLE_MS);
   };
 
   const stopMetrics = () => {
     if (sampleTimer) { clearInterval(sampleTimer); sampleTimer = null; }
+    if (hrTimer) { clearInterval(hrTimer); hrTimer = null; }
     lastBrightness = null;
+    heartSignal = [];
+    heartTime = [];
+    lastHeartSpeakAt = 0;
     resetMetrics();
   };
 
