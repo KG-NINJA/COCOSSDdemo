@@ -338,17 +338,16 @@
       draw(detections);
       if (filtered.length > 0) {
         const msg = (() => {
-          const base = (warningTextInput.value || '警告：ここは立入禁止です。直ちに立ち去ってください。').trim();
           const counts = new Map();
           filtered.forEach((d) => {
             const label = labelMap[d.class] || d.class;
             counts.set(label, (counts.get(label) || 0) + 1);
           });
-          if (counts.size === 0) return base;
+          if (counts.size === 0) return '';
           const parts = Array.from(counts.entries()).map(([label, count]) => (count > 1 ? `${label} ${count}件` : label));
-          return `${base} 検知対象: ${parts.join('、')}。`;
+          return `検知対象: ${parts.join('、')}`;
         })();
-        speak(msg);
+        if (msg) speak(msg);
         statusEl.textContent = `検知: ${filtered.length}件 / しきい値 ${Math.round(Number(th.value) * 100)}%`;
       } else {
         statusEl.textContent = `検知なし / しきい値 ${Math.round(Number(th.value) * 100)}%`;
